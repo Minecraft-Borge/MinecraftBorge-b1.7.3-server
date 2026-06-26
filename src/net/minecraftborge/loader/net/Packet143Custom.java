@@ -34,7 +34,6 @@ public class Packet143Custom extends Packet {
 
 	@Override
 	public void processPacket(NetHandler network) {
-		network.registerPacket(this);
 		ModList.get().getNetHandler(this.modID).processPacket(network, this.data);
 	}
 
