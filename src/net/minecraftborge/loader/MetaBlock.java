@@ -32,7 +32,9 @@ public class MetaBlock {
 
 	static {
 		Arrays.fill(CACHE, AIR);
+	}
 
+	public static void initialize() {
 		for (int i = 0; i < Block.blocksList.length; i++) {
 			Block block = Block.blocksList[i];
 			if (block == null) continue;
