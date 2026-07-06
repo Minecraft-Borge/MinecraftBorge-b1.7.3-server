@@ -1,6 +1,7 @@
 package net.minecraftborge;
 
 import net.minecraft.server.MinecraftServer;
+import net.minecraftborge.loader.GameObfuscationType;
 import net.minecraftborge.loader.ModList;
 import net.minecraftborge.loader.ModloadingException;
 import net.minecraftborge.loader.asm.ASMClassHelper;
@@ -106,6 +107,31 @@ public class MinecraftBorge {
 				}
 			}
 
+			localload:
+			if (GameObfuscationType.detect() == GameObfuscationType.NONE) {
+				log("No obfuscation, dev env is assumed");
+				try {
+					final Manifest manifest;
+					try (InputStream in = getClassLoader().getResourceAsStream("META-INF/MANIFEST.MF")) {
+						if (in == null) {
+							log("No local manifest, disregarding");
+							break localload;
+						}
+						manifest = new Manifest(in);
+					} catch (IOException e) {
+						throw new IllegalStateException("Exception reading manifest", e);
+					}
+
+					Attributes attributes = manifest.getMainAttributes();
+					ModCandidate candidate = new ModCandidate(null, null, attributes);
+					log(candidate.attributes.keySet().toString());
+					log(candidate.attributes.values().toString());
+					if (candidate.validateProperties()) mods.add(candidate);
+				} catch (Throwable e) {
+					e.printStackTrace(System.err);
+				}
+			}
+
 			Map<String, ModCandidate> candidatesByName = mods.stream().collect(Collectors.toMap(c -> c.name, c -> c));
 
 			List<String> modIds = new ArrayList<>();
@@ -114,7 +140,7 @@ public class MinecraftBorge {
 				if (modIds.contains(candidate.name)) throw new ModloadingException("Duplicate mod ID: " + candidate.name);
 				modIds.add(candidate.name);
 				try {
-					nameToUrl.put(candidate.name, candidate.sourceFile.toURI().toURL());
+					if (candidate.sourceFile != null) nameToUrl.put(candidate.name, candidate.sourceFile.toURI().toURL());
 				} catch (Throwable e) {
 					throw new ModloadingException(e);
 				}
@@ -130,6 +156,29 @@ public class MinecraftBorge {
 			ASMDataTable table = new ASMDataTable();
 			ModLoadingClassVisitor cv = new ModLoadingClassVisitor(Opcodes.ASM8, table);
 			for (JarFile jar : mods.stream().map(candidate -> candidate.jar).collect(Collectors.toList())) {
+				if (jar == null) {
+					try (
+							InputStream in = Objects.requireNonNull(getClassLoader().getResourceAsStream("runtime.txt"));
+							BufferedReader reader = new BufferedReader(new InputStreamReader(in))
+					) {
+						reader.lines()
+								.map(String::trim)
+								.filter(s -> !s.isEmpty())
+								.filter(s -> !s.startsWith("#"))
+								.forEach(line -> {
+									try (InputStream stream = getClassLoader().getResourceAsStream(line + ".class")) {
+										assert stream != null;
+										ClassReader cr = new ClassReader(stream);
+										cr.accept(cv, 0);
+									} catch (Throwable e) {
+										log("Invalid class name " + line + ": " + e);
+									}
+								});
+					} catch (Throwable e) {
+						log("runtime.txt not found, annotations won't be processed!");
+					}
+					continue;
+				}
 				Iterator<JarEntry> stream = jar.stream().iterator();
 				while (stream.hasNext()) {
 					JarEntry entry = stream.next();
@@ -265,14 +314,14 @@ public class MinecraftBorge {
 							blackboard.put(key, "true".equalsIgnoreCase(value));
 							break;
 						default:
-							System.out.println("Unknown borge option: " + key);
+							log("Unknown borge option: " + key);
 							break;
 					}
 				}
 			}
 			scanner.close();
 		} catch (IOException e) {
-			System.err.println("Could not load Borge config!");
+			log("Could not load Borge config!");
 			blackboard.put("ModifyMainMenu", true);
 		}
 	}
@@ -283,7 +332,7 @@ public class MinecraftBorge {
 				URL url = new URL(UPDATE_URL);
 				return Objects.requireNonNull(url.openStream());
 			} catch (Throwable e) {
-				System.err.println("Could not open stream with main update URL: " + e);
+				log("Could not open stream with main update URL: " + e);
 			}
 		}
 		useFallback = true;
@@ -291,7 +340,7 @@ public class MinecraftBorge {
 			URL url = new URL(FALLBACK_UPDATE_URL);
 			return Objects.requireNonNull(url.openStream());
 		} catch (Throwable e) {
-			System.err.println("Could not open stream with fallback update URL: " + e);
+			log("Could not open stream with fallback update URL: " + e);
 		}
 		return null;
 	}
@@ -306,7 +355,7 @@ public class MinecraftBorge {
 				while (scanner.hasNextLine()) {
 					source.append(scanner.nextLine()).append("\n");
 				}
-				System.out.print(source.append("\n"));
+				log(String.valueOf(source.append("\n")));
 			}
 			Document document = builder.parse(getXMLStream());
 			Element root = document.getDocumentElement();
