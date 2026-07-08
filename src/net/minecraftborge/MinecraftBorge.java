@@ -34,7 +34,7 @@ public class MinecraftBorge {
 	public static final String FALLBACK_UPDATE_URL = "https://minecraft-borge.github.io/files/versions.xml";
 	private static boolean useFallback = false;
 
-	public static final String VERSION = "1.6.4";
+	public static final String VERSION = "1.7.0";
 	public static final String MC_VERSION = "b1.7.3";
 
 	public static final Map<String, Object> blackboard = Collections.synchronizedMap(new HashMap<>());
